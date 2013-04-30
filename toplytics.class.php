@@ -22,6 +22,12 @@ class Toplytics{
 
 	  	try {
 			$ga = new gapi($ga_email,$ga_password);
+
+			// check if GA settings are correct
+		  /*if ( $ga->getAuthToken()==null ) {
+				return null;
+		  }*/
+
 			foreach ($ranges as $name => $start_date) {
 				$ga->requestReportData($ga_profile_id,array('pagePath'),array('pageviews'),array('-pageviews'),'',$start_date,date('Y-m-d'));
 				foreach ($ga->getResults() as $result) {
