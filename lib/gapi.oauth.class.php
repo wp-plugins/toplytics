@@ -28,13 +28,16 @@ class gapi
 {
   const http_interface = 'auto'; //'auto': autodetect, 'curl' or 'fopen'
   
-  const client_login_url = 'https://www.google.com/accounts/ClientLogin';
-  const account_data_url = 'https://www.google.com/analytics/feeds/accounts/default';
-  const report_data_url = 'https://www.google.com/analytics/feeds/data';
+  const account_data_url = 'https://www.googleapis.com/analytics/v2.4/'; //'https://www.google.com/analytics/feeds/accounts/default';
+  const report_data_url = 'https://www.googleapis.com/analytics/v2.4/management/'; //'https://www.google.com/analytics/feeds/data';
   const interface_name = 'GAPI-1.3';
   const dev_mode = false;
+
+  var $base_url = 'https://www.googleapis.com/analytics/v2.4/';
+  var $account_base_url = 'https://www.googleapis.com/analytics/v2.4/management/';
   
   private $auth_token = null;
+  private $oauth_secret = null;
   private $account_entries = array();
   private $account_root_parameters = array();
   private $report_aggregate_metrics = array();
@@ -51,15 +54,12 @@ class gapi
    * @param String $token
    * @return gapi
    */
-  public function __construct($email, $password, $token=null)
+  public function __construct($token=null, $secret=null)
   {
     if($token !== null)
     {
-      $this->auth_token = $token;
-    }
-    else 
-    {
-      $this->authenticateUser($email,$password);
+      $this->oauth_token = $token;
+      $this->oauth_secret = $secret;
     }
   }
   
@@ -70,7 +70,18 @@ class gapi
    */
   public function getAuthToken()
   {
-    return $this->auth_token;
+    return $this->oauth_token;
+  }
+  
+  
+  /**
+   * Return the auth secret, used for storing the auth secret in the user session
+   *
+   * @return String
+   */
+  public function getAuthSecret()
+  {
+    return $this->oauth_secret;
   }
   
   /**
@@ -81,7 +92,7 @@ class gapi
    */
   public function requestAccountData($start_index=1, $max_results=20)
   {
-    $response = $this->httpRequest(gapi::account_data_url, array('start-index'=>$start_index,'max-results'=>$max_results), null, $this->generateAuthHeader());
+    $response = $this->httpRequest(gapi::account_data_url, array('start-index'=>$start_index,'max-results'=>$max_results), null, $this->generateAuthHeader(gapi::account_data_url));
     
     if(substr($response['code'],0,1) == '2')
     {
@@ -206,8 +217,11 @@ class gapi
     
     $parameters['prettyprint'] = gapi::dev_mode ? 'true' : 'false';
     
-    $response = $this->httpRequest(gapi::report_data_url, $parameters, null, $this->generateAuthHeader());
-    
+    $response = $this->httpRequest(gapi::report_data_url, $parameters, null, $this->generateAuthHeader(gapi::report_data_url));
+
+error_log('                gapi::report_data_url >>>   '.gapi::report_data_url);
+error_log('                generateAuthHeader(gapi::report_data_url) >>>   '.print_r($this->generateAuthHeader(gapi::report_data_url),true));
+   
     //HTTP 2xx
     if(substr($response['code'],0,1) == '2')
     {
@@ -215,7 +229,9 @@ class gapi
     }
     else 
     {
-      throw new Exception('GAPI: Failed to request report data. Error: "' . strip_tags($response['body']) . '"');
+		$error_message = 'GAPI: Failed to request report data. Error: "' . strip_tags($response['body']) . '"';
+		error_log($error_message);
+		throw new Exception($error_message);
     }
   }
 
@@ -393,44 +409,28 @@ class gapi
   }
   
   /**
-   * Authenticate Google Account with Google
-   *
-   * @param String $email
-   * @param String $password
-   */
-  protected function authenticateUser($email, $password)
-  {
-    $post_variables = array(
-      'accountType' => 'GOOGLE',
-      'Email' => $email,
-      'Passwd' => $password,
-      'source' => gapi::interface_name,
-      'service' => 'analytics'
-    );
-    
-    $response = $this->httpRequest(gapi::client_login_url,null,$post_variables);
-    
-    //Convert newline delimited variables into url format then import to array
-    parse_str(str_replace(array("\n","\r\n"),'&',$response['body']),$auth_token);
-
-	error_log(print_r($auth_token,true));    
-
-    if(substr($response['code'],0,1) != '2' || !is_array($auth_token) || empty($auth_token['Auth']))
-    {
-      throw new Exception('GAPI: Failed to authenticate user. Error: "' . strip_tags($response['body']) . '"');
-    }
-    
-    $this->auth_token = $auth_token['Auth'];
-  }
-  
-  /**
    * Generate authentication token header for all requests
    *
    * @return Array
    */
-  protected function generateAuthHeader()
+  protected function generateAuthHeader($url)
   {
-    return array('Authorization: GoogleLogin auth=' . $this->auth_token);
+      $request_type = 'GET';
+
+      $signature_method = new GADOAuthSignatureMethod_HMAC_SHA1();
+
+      $params = array();
+
+      $consumer = new GADOAuthConsumer('anonymous', 'anonymous', NULL);
+
+      $token = new GADOAuthConsumer($this->oauth_token, $this->oauth_secret);
+
+      $oauth_req = GADOAuthRequest::from_consumer_and_token($consumer, $token, $request_type, $url, $params);
+
+      $oauth_req->sign_request($signature_method, $consumer, $token);
+
+      return array( $oauth_req->to_header() );
+
   }
   
   /**
