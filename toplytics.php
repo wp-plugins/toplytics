@@ -4,10 +4,9 @@
  * Plugin URI: http://wordpress.org/extend/plugins/toplytics/
  * Description: Plugin for displaying most viewed content using data from a Google Analytics account. Relieves the DB from writing every click.
  * Author: PressLabs
- * Version: 2.1
+ * Version: 2.1.1
  * Author URI: http://www.presslabs.com/
  */
-define( 'TOPLYTICS_DEBUG_MODE', true );
 define( 'TOPLYTICS_DEFAULT_POSTS', 5 );
 define( 'TOPLYTICS_MIN_POSTS', 1 );
 define( 'TOPLYTICS_MAX_POSTS', 20 );
@@ -17,32 +16,21 @@ define( 'TOPLYTICS_TEXTDOMAIN', 'toplytics-text-domain' );
 define( 'TOPLYTICS_TEMPLATE_FILENAME', 'toplytics-template.php' );
 define( 'TOPLYTICS_REALTIME_TEMPLATE_FILENAME', 'toplytics-template-realtime.php' );
 
-$toplytics_periods = array(
-	'month' => array(
-		'label' => 'Monthly',
-		'range' => date( 'Y-m-d', strtotime( '-30 days' ) ),
-	),
-	'today' => array(
-		'label' => 'Daily',
-		'range' => date( 'Y-m-d', strtotime( 'yesterday' ) ),
-	),
-	'2weeks' => array(
-		'label' => '2 Weeks',
-		'range' => date( 'Y-m-d', strtotime( '-14 days' ) ),
-	),
-	'week' => array(
-		'label' => 'Weekly',
-		'range' => date( 'Y-m-d', strtotime( '-7 days' ) ),
-	)
-);
-$periods = apply_filters( 'toplytics_periods', $toplytics_periods );
-
 global $ranges, $ranges_label;
 
-foreach ( $periods as $index => $data ) {
-	$ranges[ $index ]       = $data['range'];
-	$ranges_label[ $index ] = $data['label'];
-}
+$ranges = array(
+	'month'  => date( 'Y-m-d', strtotime( '-30 days'  ) ),
+	'today'  => date( 'Y-m-d', strtotime( 'yesterday' ) ),
+	'2weeks' => date( 'Y-m-d', strtotime( '-14 days'  ) ),
+	'week'   => date( 'Y-m-d', strtotime( '-7 days'   ) ),
+);
+
+$ranges_label = array(
+	'month'  => 'Monthly',
+	'today'  => 'Daily',
+	'2weeks' => '2 Weeks',
+	'week'   => 'Weekly',
+);
 
 require_once 'toplytics-admin.php';            // interface
 require_once 'toplytics-widget.php';           // Widget code integration
@@ -50,12 +38,12 @@ require_once 'class-toplytics-auth.php';       // the login logic
 require_once 'class-toplytics-statistics.php'; // the statistics logic
 $obj = new Toplytics_Auth();
 
-if ( defined( 'TOPLYTICS_DEBUG_MODE' ) && TOPLYTICS_DEBUG_MODE ) {
+if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 	require_once 'toplytics-debug.php'; // debug page
 }
 
 function toplytics_log( $message ) {
-	if ( defined( TOPLYTICS_DEBUG_MODE  )  ) {
+	if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 		error_log( $message );
 	}
 }
@@ -125,7 +113,6 @@ if ( toplytics_has_configuration() ) {
 }
 
 function toplytics_do_this_hourly() {
-	do_action( 'toplytics_do_this_hourly' );
 	Toplytics_Statistics::get_results(); // get GA statistics
 	toplytics_save_stats_in_json(); // save GA statistics in JSON file
 }
@@ -217,7 +204,7 @@ function toplytics_save_stats_in_json() {
 				}
 			}
 		}
-		$data = apply_filters( 'toplytics_json_data', $post_data, $filepath );
-		file_put_contents( $filepath, json_encode( $data, JSON_FORCE_OBJECT ) );
+		$post_data = apply_filters( 'toplytics_save_stats_in_json', $post_data, $filepath );
+		file_put_contents( $filepath, json_encode( $post_data, JSON_FORCE_OBJECT ) );
 	}
 }
